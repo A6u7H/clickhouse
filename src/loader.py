@@ -1,15 +1,16 @@
+import yaml
 import pandas as pd
 import configparser
 
 from clickhouse_driver import Client
 from typing import Dict
 
-from consts import COLUMNS, RENAME
-
 
 class DataLoader:
     def __init__(self, config):
         self.config = config
+        with open(self.config["CONST"]["PATH"], 'r') as stream:
+            self.project_params = yaml.safe_load(stream)
 
     def get_create_table_query(
         self,
@@ -39,8 +40,8 @@ class DataLoader:
             sep="\t",
             nrows=self.config.getint("CLICKHOUSE", "UPLOAD_LIMIT")
         )
-        data = data.rename(columns=RENAME)
-        data = data[COLUMNS]
+        data = data.rename(columns=self.project_params["rename"])
+        data = data[self.project_params["columns"]]
         data = data.fillna(0)
 
         client = Client(
@@ -63,7 +64,10 @@ class DataLoader:
         table_name = self.config["CLICKHOUSE"]["TABLE_NAME"]
         nrows = self.config.getint("CLICKHOUSE", "DOWNLOAD_LIMIT")
         data = client.execute(f"SELECT * FROM {table_name} limit {nrows}")
-        df = pd.DataFrame(data=data, columns=COLUMNS)
+        df = pd.DataFrame(
+            data=data,
+            columns=self.project_params["columns"]
+        )
         df.to_parquet(self.config["CLICKHOUSE"]["DATA_SAVE_PATH"], index=False)
 
     def upload_prediction(self, data):
