@@ -30,5 +30,5 @@ services:
       - testnet
 
 networks:
-  testnet:
+  testnet: 
     driver: bridge
