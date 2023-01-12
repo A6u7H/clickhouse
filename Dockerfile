@@ -5,6 +5,7 @@ USER root
 WORKDIR /app
 
 RUN mkdir experiments
+RUN chmod -R 765 experiments
 
 ADD /data /app/data
 ADD /config /app/config

@@ -1,3 +1,4 @@
+import yaml
 import logging
 import configparser
 
@@ -8,54 +9,80 @@ from pyspark.ml.feature import StandardScaler
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.evaluation import ClusteringEvaluator
 
-from consts import COLUMNS
 from loader import DataLoader
-
-INPUT_FILE = "./experiments/market_data.parquet"
-OUTPUT_FILE = "./experiments/clusters.parquet"
-N_CLUSTERS = 25
-NUM_PARTITIONS = 60
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-config_path = "./config/config.ini"
-config = configparser.ConfigParser()
-config.read(config_path)
-loader = DataLoader(config)
 
-config = SparkConf()
-sc = SparkContext(conf=config)
-spark = SparkSession(sc)
+class ClusterModel:
+    def __init__(self, config):
+        self.config = config
+        self.loader = DataLoader(config)
+        self.spark, self.spark_context = self.configurate_spark()
+        with open(config["CONST"]["PATH"], 'r') as stream:
+            self.project_params = yaml.safe_load(stream)
 
-df_datamart = spark.read.parquet(INPUT_FILE).repartition(NUM_PARTITIONS)
-assemble = VectorAssembler(inputCols=COLUMNS, outputCol='features')
-assembled_data = assemble.transform(df_datamart)
+    def configurate_spark(self):
+        conf = SparkConf()
+        spark_context = SparkContext(conf=conf)
+        spark = SparkSession(spark_context)
+        return spark, spark_context
 
-evaluator = ClusteringEvaluator(
-    featuresCol='standardized',
-    metricName='silhouette',
-    distanceMeasure='squaredEuclidean'
-)
-scale = StandardScaler(
-    inputCol='features',
-    outputCol='standardized'
-)
+    def prepare_data(self):
+        df_datamart = self.spark.read.parquet(
+            self.config["CLUSTERING"]["INPUT_FILE"]
+        ).repartition(self.config.getint("CLUSTERING", "NUM_PARTITIONS"))
+        assemble = VectorAssembler(
+            inputCols=self.project_params["columns"],
+            outputCol='features'
+        )
+        assembled_data = assemble.transform(df_datamart)
+        return assembled_data
 
-kmeans_model = KMeans(
-    k=N_CLUSTERS,
-    seed=42,
-    featuresCol='standardized',
-    predictionCol='prediction'
-)
+    def create_cluster(self, assembled_data):
+        evaluator = ClusteringEvaluator(
+            featuresCol='standardized',
+            metricName='silhouette',
+            distanceMeasure='squaredEuclidean'
+        )
+        scale = StandardScaler(
+            inputCol='features',
+            outputCol='standardized'
+        )
 
-data_scale = scale.fit(assembled_data).transform(assembled_data)
-model = kmeans_model.fit(data_scale)
-transform_data = model.transform(data_scale)
+        kmeans_model = KMeans(
+            k=self.config.getint("CLUSTERING", "N_CLUSTERS"),
+            seed=42,
+            featuresCol='standardized',
+            predictionCol='prediction'
+        )
 
-evaluation_score = evaluator.evaluate(transform_data)
-logger.info(f"EVALUATION SCORE: {evaluation_score}")
+        data_scale = scale.fit(assembled_data).transform(assembled_data)
+        model = kmeans_model.fit(data_scale)
+        transform_data = model.transform(data_scale)
+        evaluation_score = evaluator.evaluate(transform_data)
+        return transform_data, evaluation_score
 
-df_datamart_pd = df_datamart.toPandas()
-df_datamart_pd["cluster"] = transform_data.select("prediction").toPandas().values.flatten()
-loader.upload_prediction(df_datamart_pd)
+    def load_data_to_clickhouse(
+        self,
+        transform_data
+    ):
+        df_datamart = self.spark.read.parquet(
+            self.config["CLUSTERING"]["INPUT_FILE"]
+        ).repartition(self.config.getint("CLUSTERING", "NUM_PARTITIONS"))
+        df_datamart_pd = df_datamart.toPandas()
+        df_datamart_pd["cluster"] = transform_data.select("prediction").toPandas().values.flatten()
+        self.loader.upload_prediction(df_datamart_pd)
+
+
+if __name__ == "__main__":
+    config_path = "./config/config.ini"
+    config = configparser.ConfigParser()
+    config.read(config_path)
+
+    model = ClusterModel(config)
+    assembled_data = model.prepare_data()
+    transform_data, evaluation_score = model.create_cluster(assembled_data)
+    logger.info(f"EVALUATION SCORE: {evaluation_score}")
+    model.load_data_to_clickhouse(transform_data)

@@ -3,13 +3,11 @@ services:
   db:
     image: clickhouse/clickhouse-server
     container_name: clickhouse
-    environment:
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
     ports:
       - 9000:9000
       - 8123:8123
+    env_file: 
+      - .env
     networks:
       - testnet
     volumes:
@@ -18,16 +16,18 @@ services:
       nofile:
         soft: 262144
         hard: 262144
-  # cluster_model:
-  #   build: .
-  #   container_name: cluster_spark
-  #   volumes:
-  #     - ./experiments:/experiments
-  #     - ./data_market:/data_market
-  #   command: /bin/bash -c '/opt/spark/bin/spark-submit ./src/loader.py && /opt/spark/bin/spark-submit ./src/clustering.py'
-  #   image: danjiii/cluster_spark
-  #   networks:
-  #     - testnet
+  cluster_model:
+    build: .
+    container_name: cluster_spark
+    env_file: 
+      - .env
+    volumes:
+      - ./experiments:/experiments
+      - ./data_market:/data_market
+    command: /bin/bash -c '/opt/spark/bin/spark-submit ./src/loader.py && /opt/spark/bin/spark-submit ./src/clustering.py'
+    image: danjiii/cluster_spark
+    networks:
+      - testnet
 
 networks:
   testnet:
