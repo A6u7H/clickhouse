@@ -12,7 +12,7 @@ ADD /config /app/config
 ADD /src /app/src
 ADD requirements.txt /app
 
-RUN pip --no-cache-dir install -r requirements.txt
+RUN pip install -r requirements.txt
 
 ENV SPARK_DRIVER_MEMORY=16G
 ENV SPARK_EXECUTOR_CORES=12

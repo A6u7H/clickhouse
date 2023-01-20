@@ -1,9 +1,13 @@
+import os
 import yaml
 import pandas as pd
 import configparser
 
 from clickhouse_driver import Client
 from typing import Dict
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class DataLoader:
@@ -43,10 +47,12 @@ class DataLoader:
         data = data.rename(columns=self.project_params["rename"])
         data = data[self.project_params["columns"]]
         data = data.fillna(0)
-
         client = Client(
             host=self.config["CLICKHOUSE"]["HOST"],
-            port=self.config["CLICKHOUSE"]["PORT"]
+            port=self.config["CLICKHOUSE"]["PORT"],
+            database=os.environ["CLICKHOUSE_DB"],
+            user=os.environ["CLICKHOUSE_USER"],
+            password=os.environ["CLICKHOUSE_PASSWORD"]
         )
 
         table_name = self.config["CLICKHOUSE"]["TABLE_NAME"]
@@ -58,7 +64,10 @@ class DataLoader:
     def load(self):
         client = Client(
             host=self.config["CLICKHOUSE"]["HOST"],
-            port=self.config["CLICKHOUSE"]["PORT"]
+            port=self.config["CLICKHOUSE"]["PORT"],
+            database=os.environ["CLICKHOUSE_DB"],
+            user=os.environ["CLICKHOUSE_USER"],
+            password=os.environ["CLICKHOUSE_PASSWORD"]
         )
 
         table_name = self.config["CLICKHOUSE"]["TABLE_NAME"]
@@ -73,7 +82,10 @@ class DataLoader:
     def upload_prediction(self, data):
         client = Client(
             host=self.config["CLICKHOUSE"]["HOST"],
-            port=self.config["CLICKHOUSE"]["PORT"]
+            port=self.config["CLICKHOUSE"]["PORT"],
+            database=os.environ["CLICKHOUSE_DB"],
+            user=os.environ["CLICKHOUSE_USER"],
+            password=os.environ["CLICKHOUSE_PASSWORD"]
         )
         table_name = "Cluster"
         query = self.get_create_table_query(table_name, dict(data.dtypes))
